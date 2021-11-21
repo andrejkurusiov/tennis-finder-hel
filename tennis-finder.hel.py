@@ -17,16 +17,18 @@ logging.basicConfig(level=logging.ERROR,
 WORKDAYS = (1, 2, 3, 4, 5)
 WEEKENDS = (6, 7)
 START_HOUR = 16
-END_HOUR = 20
+END_HOUR = 21
 MAX_COURT_NO = 30   # maximum number of valid court; the rest are ball cannons
 # websites return _currently_ maximum of +4 weeks (28 days) forward
-PLUS_DAYS_MAX = 2  # 4*7      # XXX return to 4*7 value!
+PLUS_DAYS_MAX = 6  # 4*7      # XXX return to 4*7 value!
 
 CENTERS = {
     # XXX uncomment!
     'smash': {'url': 'https://smashcenter.slsystems.fi', 'name_nice': 'Smash'},
+    # Tali moved to new system at https://talitaivallahti.feel.cintoia.com/
     # 'tali': {'url': 'https://varaukset.talintenniskeskus.fi', 'name_nice': 'Tali'},
-    'puhos': {'url': 'https://play.fi/puhoscenter', 'name_nice': 'Puhos'},
+    'puhos': {'url': 'https://play.fi/mandatumcenter', 'name_nice': 'Puhos/MandatumCenter'},
+    'mailapelikeskus': {'url': 'https://play.fi/mailapelikeskus', 'name_nice': 'Helsingin Mailapelikeskus'},
 }
 
 # Data structure to store results from all tennis centers:
@@ -106,7 +108,7 @@ def parse_results(data: str, center: str) -> list:
     links = [link.get('href') for link in soup.select(
         'a[href*="/booking/create-booking"]')]
     # use urlparse to split links' parameters
-    # logging.debug(f'Links: {links}')
+
     for link in links:
         urlstring = urlparse(link, allow_fragments=False).query
         urldic = parse_qs(urlstring)
@@ -115,13 +117,16 @@ def parse_results(data: str, center: str) -> list:
         start_time = datetime.strptime(
             urldic.get('alkuaika')[0], "%Y-%m-%d %H:%M:%S")
         start_hour = start_time.hour
-        is_suitable_time = start_hour in range(START_HOUR, END_HOUR)
+
+        is_suitable_time = start_hour in range(START_HOUR, END_HOUR+1)
+
         if court_no < MAX_COURT_NO and is_suitable_time:
             results.append(
                 {'time': start_time.strftime("%H:%M"),
                  'duration': duration,
                  'court': court_no, }
             )
+            # logging.debug(results)
             # 'link': CENTERS.get(center).get('url')})
     return results
 
@@ -134,13 +139,15 @@ def display_results(results) -> None:
 def tennis_finder_hel():
     # read_parameters()
     print(
-        f'Reading availability of {len(CENTERS)} centers for {PLUS_DAYS_MAX} days...\n')
+        f'Reading availability of {len(CENTERS)} centers for {PLUS_DAYS_MAX} days with starting time between {START_HOUR} and {END_HOUR}...\n')
     today = date.today()
     # check all days from today up to +PLUS_DAYS_MAX
     for days_plus in range(PLUS_DAYS_MAX+1):
         date_ = today + timedelta(days=days_plus)
-        date_nice = date_.strftime("%Y-%m-%d")
-        # filter out weekends
+        # date_nice is used in URL and in presenting the data
+        date_for_url = date_.strftime("%Y-%m-%d")  # for forming URL
+        date_nice = date_.strftime("%a %d %b")  # for printout
+        # skip weekends
         if date_.isoweekday() in WEEKENDS:
             # logging.debug(f'Date {date_} (day = {date_.isoweekday()}) --> Weekend detected, skipping')
             continue
@@ -148,7 +155,7 @@ def tennis_finder_hel():
         for center, cdata in CENTERS.items():
             url = cdata.get('url', '')
             # logging.debug(f'fetching: {date_}: {url}')
-            data = fetch_raw_data(url, date_nice)
+            data = fetch_raw_data(url, date_for_url)
             parsed_data = parse_results(data, center)
             print(
                 f'Availability for {center.title()} center ({CENTERS.get(center).get("url")}) on {date_} between {START_HOUR} and {END_HOUR}: {len(parsed_data)} slots.')
